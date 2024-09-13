@@ -1,87 +1,22 @@
 import sqlite3
 import json
-import datetime
-
-timeframe = "2015-01"
+from datetime import datetime
+import time
+import sys #for debug
+timeframe = '2017-03'
 sql_transaction = []
+start_row = 0
+cleanup = 1000000
 
-# setting up connection
-connection = sqlite3.connect(f"{timeframe}.db")
+connection = sqlite3.connect('{}.db'.format(timeframe))
 c = connection.cursor()
 
 def create_table():
-    c.execute(
-        """
-        CREATE TABLE IF NOT EXISTS parent_reply (
-            parent_id TEXT PRIMARY KEY,
-            comment_id TEXT UNIQUE,
-            parent TEXT,
-            comment TEXT,
-            subreddit TEXT,
-            unix INT,
-            score INT
-        );
-        """
-    )
+    c.execute("CREATE TABLE IF NOT EXISTS parent_reply(parent_id TEXT PRIMARY KEY, comment_id TEXT UNIQUE, parent TEXT, comment TEXT, subreddit TEXT, unix INT, score INT)")
 
 def format_data(data):
-    data = data.replace("\n", " newlinechar ").replace("\r", " newlinechar ").replace('"', "'")
+    data = data.replace('\n',' newlinechar ').replace('\r',' newlinechar ').replace('"',"'")
     return data
-
-def find_parent(pid):
-    try:
-        sql = "SELECT comment FROM parent_reply WHERE comment_id = ? LIMIT 1"
-        c.execute(sql, (pid,))
-        result = c.fetchone()
-        if result:
-            return result[0]
-        return False
-    except Exception as e:
-        print(f"Error finding parent: {str(e)}")
-        return False
-
-def find_existing_comment(pid):
-    try:
-        sql = "SELECT score FROM parent_reply WHERE parent_id = ? LIMIT 1"
-        c.execute(sql, (pid,))
-        result = c.fetchone()
-        if result is not None:
-            return result[0]
-        return False
-    except Exception as e:
-        print(f"Error finding score: {str(e)}")
-        return False
-
-def acceptable_body(data):
-    if len(data.split(' ')) > 50 or len(data) < 1:
-        return False
-    elif len(data) > 1000:
-        return False
-    elif data == '[deleted]' or data == '[removed]':
-        return False
-    else:
-        return True
-
-def sql_insert_replace(comment_id, parent_id, parent_data, body, subreddit, utc, score):
-    try:
-        sql = "UPDATE parent_reply SET comment_id = ?, parent = ?, comment = ?, subreddit = ?, unix = ?, score = ? WHERE parent_id = ?"
-        transaction_bldr(sql, (comment_id, parent_data, body, subreddit, utc, score, parent_id))
-    except Exception as e:
-        print(f"Error updating insert: {str(e)}")
-
-def sql_insert_has_parent(comment_id, parent_id, parent_data, body, subreddit, utc, score):
-    try:
-        sql = "INSERT INTO parent_reply (comment_id, parent_id, parent, comment, subreddit, unix, score) VALUES (?, ?, ?, ?, ?, ?, ?)"
-        transaction_bldr(sql, (comment_id, parent_id, parent_data, body, subreddit, utc, score))
-    except Exception as e:
-        print(f"Error inserting row HasParent: {str(e)}")
-
-def sql_insert_no_parent(comment_id, parent_id, body, subreddit, utc, score):
-    try:
-        sql = "INSERT INTO parent_reply (comment_id, parent_id, comment, subreddit, unix, score) VALUES (?, ?, ?, ?, ?, ?)"
-        transaction_bldr(sql, (comment_id, parent_id, body, subreddit, utc, score))
-    except Exception as e:
-        print(f"Error inserting row NoParent: {str(e)}")
 
 def transaction_bldr(sql, values):
     global sql_transaction
@@ -92,46 +27,126 @@ def transaction_bldr(sql, values):
             try:
                 c.execute(s, v)
             except Exception as e:
-                # print("SQL error: " + str(e))
+                # print(f"SQL error: {str(e)}")
                 pass
         connection.commit()
         sql_transaction = []
 
-if __name__ == "__main__":
+def sql_insert_replace_comment(commentid, parentid, parent, comment, subreddit, time, score):
+    try:
+        sql = """UPDATE parent_reply SET parent_id = ?, comment_id = ?, parent = ?, comment = ?, subreddit = ?, unix = ?, score = ? WHERE parent_id = ?"""
+        transaction_bldr(sql, (parentid, commentid, parent, comment, subreddit, int(time), score, parentid))
+        # print(f"sql_insert_replace_comment: parent_id={parentid}, parent={parent}")
+    except Exception as e:
+        print('s0 insertion', str(e))
+
+def sql_insert_has_parent(commentid, parentid, parent, comment, subreddit, time, score):
+    try:
+        sql = """INSERT INTO parent_reply (parent_id, comment_id, parent, comment, subreddit, unix, score) VALUES (?, ?, ?, ?, ?, ?, ?)"""
+        transaction_bldr(sql, (parentid, commentid, parent, comment, subreddit, int(time), score))
+        # print(f"sql_insert_has_parent: parent_id={parentid}, parent={parent}")
+    except Exception as e:
+        print('s0 insertion', str(e))
+
+def sql_insert_no_parent(commentid, parentid, comment, subreddit, time, score):
+    try:
+        sql = """INSERT INTO parent_reply (parent_id, comment_id, comment, subreddit, unix, score) VALUES (?, ?, ?, ?, ?, ?)"""
+        transaction_bldr(sql, (parentid, commentid, comment, subreddit, int(time), score))
+        # print(f"sql_insert_no_parent: parent_id={parentid}, parent=None")
+    except Exception as e:
+        if "UNIQUE constraint failed: parent_reply.parent_id" in str(e):
+            parent_data = find_parent(parentid)
+            if parent_data:
+                sql_insert_has_parent(commentid, parentid, parent_data, comment, subreddit, time, score)
+            else:
+                print("Parent not found")
+        else:
+            print('s0 insertion', str(e))
+
+def acceptable(data):
+    if len(data.split(' ')) > 1000 or len(data) < 1:
+        return False
+    elif len(data) > 32000:
+        return False
+    elif data == '[deleted]':
+        return False
+    elif data == '[removed]':
+        return False
+    else:
+        return True
+
+def find_parent(pid):
+    try:
+        sql = "SELECT comment FROM parent_reply WHERE comment_id = ? LIMIT 1"
+        c.execute(sql, (pid,))
+        result = c.fetchone()
+        if result is not None:
+            return result[0]
+        else:
+            return None
+    except Exception as e:
+        print(f"Error finding parent: {str(e)}")
+        return None
+
+def find_existing_score(pid):
+    try:
+        sql = "SELECT score FROM parent_reply WHERE parent_id = ? LIMIT 1"
+        c.execute(sql, (pid,))
+        result = c.fetchone()
+        if result is not None:
+            return result[0]
+        else:
+            return None
+    except Exception as e:
+        print(f"Error finding score: {str(e)}")
+        return None
+    
+if __name__ == '__main__':
     create_table()
     row_counter = 0
     paired_rows = 0
+
     with open("C:\\Users\\nithi\\Downloads\\RC_2015-01\\RC_2015-01", buffering=1000) as f:
         for row in f:
             row_counter += 1
-            row = json.loads(row)
-            parent_id = row["parent_id"]
-            comment_id = row["name"]
-            body = format_data(row["body"])
-            utc = row["created_utc"]
-            score = row["score"]
-            subreddit = row["subreddit"]
 
-            parent_data = find_parent(parent_id)
-
-            if score >= 2:
-                if acceptable_body(body):
-                    existing_comment_score = find_existing_comment(parent_id)
+            if row_counter > start_row:
+                try:
+                    row = json.loads(row)
+                    parent_id = row['parent_id'].split('_')[1]
+                    body = format_data(row['body'])
+                    created_utc = row['created_utc']
+                    score = row['score']
+                    
+                    comment_id = row['id']
+                    
+                    subreddit = row['subreddit']
+                    parent_data = find_parent(parent_id)
+                    
+                    existing_comment_score = find_existing_score(parent_id)
                     if existing_comment_score:
-                        try:
-                            existing_comment_score = int(existing_comment_score)
-                            if score > existing_comment_score:
-                                sql_insert_replace(comment_id, parent_id, parent_data, body, subreddit, utc, score)
-                        except ValueError as e:
-                            print(f"Error converting existing_comment_score to int: {str(e)}")
+                        if score > existing_comment_score:
+                            if acceptable(body):
+                                sql_insert_replace_comment(comment_id, parent_id, parent_data, body, subreddit, created_utc, score)
                     else:
-                        if parent_data:
-                            sql_insert_has_parent(comment_id, parent_id, parent_data, body, subreddit, utc, score)
-                            paired_rows += 1
-                        else:
-                            sql_insert_no_parent(comment_id, parent_id, body, subreddit, utc, score)
+                        if acceptable(body):
+                            if parent_data:
+                                if score >= 2:
+                                    sql_insert_has_parent(comment_id, parent_id, parent_data, body, subreddit, created_utc, score)
+                                    paired_rows += 1
+                            else:
+                                sql_insert_no_parent(comment_id, parent_id, body, subreddit, created_utc, score)
+                except Exception as e:
+                    print(str(e))
+                            
+            if row_counter % 100000 == 0:
+                print('Total Rows Read: {}, Paired Rows: {}, Time: {}'.format(row_counter, paired_rows, str(datetime.now())))
 
-            if row_counter % 100000 == 0 or row <100000:
-                print(f"Total rows: {row_counter}, Paired rows: {paired_rows} Time: {str(datetime.datetime.now())}")
-
-print("completed")
+            if row_counter > start_row:
+                if row_counter % cleanup == 0:
+                    print("Cleaning up!")
+                    sql = "DELETE FROM parent_reply WHERE parent IS NULL"
+                    c.execute(sql)
+                    connection.commit()
+                    c.execute("VACUUM")
+                    connection.commit()
