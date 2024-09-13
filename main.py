@@ -10,7 +10,7 @@ def speak(answer):
     tts = gTTS(answer.replace('•', '  *'))
     tts.save("audio.mp3")
     print(f"JARVIS: {answer}")
-    playsound("audio.mp3")
+    subprocess.run(["mpg321", "audio.mp3"], check=True)
 
 def take_command():
     """Listen to user's speech and return the recognized text in lowercase."""
@@ -27,8 +27,7 @@ def take_command():
             query = "Sorry, could not recognize"
             print(query)
             return query
-        
-def main():
+def conversation():
     Talk = True
     while Talk:
         user_said = take_command()
@@ -37,19 +36,26 @@ def main():
             continue
         if "hello" in user_said:
             speak("Hi")
+            continue
         if "bye" in user_said:
             speak("goodbye")
+            break
         if "how are you" in user_said:
             speak("Doing well")
+            continue
         if "stop" in user_said:
             speak("Stopping sir")
             break
         if "exit" in user_said:
             speak("ending program")
             Talk = False
+            continue
         if "open my email" in user_said:
             speak("This is where I would run a program to open your email.")
-        time.sleep(2)
+            continue
+        time.sleep(2)  
+
+def main():
+    conversation()
 
 main()
-
