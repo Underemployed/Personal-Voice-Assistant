@@ -1,6 +1,3 @@
-secret_key.py
+RC_*
 env
-audio.mp3
-dummy.py
-test.py
-*.pyc
+*.db
