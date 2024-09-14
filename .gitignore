@@ -1,3 +1,4 @@
 RC_*
 env
 *.db
+node_modules

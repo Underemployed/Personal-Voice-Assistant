@@ -3,12 +3,13 @@ import json
 from datetime import datetime
 import time
 import sys #for debug
-timeframe = '2017-03'
+timeframe = '2015-05'
 sql_transaction = []
 start_row = 0
 cleanup = 1000000
 
-connection = sqlite3.connect('{}.db'.format(timeframe))
+connection = sqlite3.connect(f'{timeframe}.db')
+
 c = connection.cursor()
 
 def create_table():

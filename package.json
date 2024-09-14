@@ -1,0 +1,19 @@
+{
+  "dependencies": {
+    "async": "^3.2.6",
+    "fs": "^0.0.1-security",
+    "pandas": "^0.0.3",
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.1.7"
+  },
+  "name": "personal-voice-assistant",
+  "description": "",
+  "version": "1.0.0",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
